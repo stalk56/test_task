@@ -193,7 +193,7 @@ static int __init hello_init(void) {
 	thread[1] = kthread_run(&processList, &data[1], "direction2");
 	for(int i = 0;  i<sizeof(thread)/sizeof(thread[0]); i++)
 	{
-		if(IS_ERR(thread[0]))
+		if(IS_ERR(thread[i]))
 			printk(KERN_INFO "Error starting thread%d\n",i);
 	}
     return 0; // Возврат 0 означает успешную загрузку модуля
@@ -205,3 +205,4 @@ static void __exit hello_exit(void) {
 
 module_init(hello_init); // Указывает функцию инициализации
 module_exit(hello_exit); // Указывает функцию выгрузки
+
