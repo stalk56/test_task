@@ -81,84 +81,65 @@ static int processList(void* arg) {
     ThreadData* data = (ThreadData*)arg;
     Node* currentNode;
 
-    // Thread 1 processes from head (counts bits=0)
-    if (data->direction == 0) {
-    	do
-    	{
-    		mutex_lock(&list_lock);
-    		currentNode = data->list->head;
-    		int value = 0;
-    		if(currentNode != NULL)
-    		{
-    			value = currentNode->value;
-    			deleteNode(data->list, currentNode);
-    		}
-    		else
-    		{
-    			mutex_unlock(&list_lock);
-    			break;
-    		}
-    		mutex_unlock(&list_lock);
-    		data->count_nodes++;
-//    		//вариант подсчета всех нулей
-//    		for (int i = 0; i < sizeof(value) * 8; i++) {
-//				if (((value >> i) & 1) == 0) {
-//					data->count_bits++;
+    while (!kthread_should_stop()) {
+    	mutex_lock(&list_lock);
+    	currentNode = (data->direction == 0) ? data->list->head : data->list->tail;
+		if (currentNode == NULL) {
+			mutex_unlock(&list_lock);
+			break;
+		}
+		int value = currentNode->value;
+		deleteNode(data->list, currentNode);
+		mutex_unlock(&list_lock);
+
+		data->count_nodes++;
+		// Обработка value)
+		if (data->direction == 0) {
+			//вариант подсчета всех нулей
+			for (int i = 0; i < sizeof(value) * 8; i++) {
+				if (((value >> i) & 1) == 0) {
+					data->count_bits++;
+				}
+			}
+			//вариант подсчета только значащих нулей
+//			if(value == 0)
+//				data->count_bits++;
+//			else
+//			{
+//				int startBit = 0;
+//				for (int i = sizeof(value) * 8 - 1; i >= 0; i--) {
+//					if( ((1<<i) & value) != 0 )
+//					{
+//						startBit = i;
+//						break;
+//					}
+//				}
+//				for(int i = 0; i < startBit; i++)
+//				{
+//					if( ((1<<i) & value) == 0 ) {
+//						data->count_bits++;
+//					}
 //				}
 //			}
-    		//вариант подсчета только значащих нулей
-    		if(value == 0)
-    			data->count_bits++;
-    		else
-    		{
-				int startBit = 0;
-				for (int i = sizeof(value) * 8 - 1; i >= 0; i--) {
-					if( ((1<<i) & value) != 0 )
-					{
-						startBit = i;
-						break;
-					}
-				}
-				for(int i = 0; i < startBit; i++)
-				{
-					if( ((1<<i) & value) == 0 ) {
-						data->count_bits++;
-					}
-				}
-			}
-    	}
-    	while((data->list->head != NULL) && !kthread_should_stop());
-    	pr_info("Thread 1: %d bits=0 in %d nodes\n", data->count_bits, data->count_nodes);
-    }
-    // Thread 2 processes from tail (counts bits=1)
-    else {
-    	do
-		{
-    		mutex_lock(&list_lock);
-			currentNode = data->list->tail;
-			int value = 0;
-			if(currentNode != NULL)
-			{
-				value = currentNode->value;
-				deleteNode(data->list, currentNode);
-			}
-			else
-			{
-				mutex_unlock(&list_lock);
-				break;
-			}
-			mutex_unlock(&list_lock);
-			data->count_nodes++;
+		} else {
+			// подсчет единиц
 			for (int i = 0; i < sizeof(value) * 8; i++) {
 				if (((value >> i) & 1) == 1) {
 					data->count_bits++;
 				}
 			}
 		}
-		while((data->list->tail != NULL) && (!kthread_should_stop()));
-    	pr_info("Thread 2: %d bits=1 in %d nodes\n", data->count_bits, data->count_nodes);
     }
-    thread[data->direction==0?0:1] = NULL;
+    if(data->direction == 0)
+    {
+    	pr_info("Thread 1: %d bits=0 in %d nodes\n", data->count_bits, data->count_nodes);
+    	thread[0] = NULL;
+    }
+    else
+    {
+    	pr_info("Thread 2: %d bits=1 in %d nodes\n", data->count_bits, data->count_nodes);
+    	thread[1] = NULL;
+    }
     return 0;
 }
 
