@@ -7,6 +7,7 @@
 #include <linux/sched.h>
 #include <linux/mutex.h>
 #include <linux/random.h>
+#include <linux/delay.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Nikolai");
@@ -36,11 +37,11 @@ typedef struct {
     int count_nodes;
 } ThreadData;
 
-void appendNode(DoublyLinkedList* list);
-void deleteNode(DoublyLinkedList* list, Node* node);
-int processList(void* arg);
+static struct task_struct* thread[2];
+static ThreadData data[2];
+static DoublyLinkedList list;
 
-void appendNode(DoublyLinkedList* list) {
+static void appendNode(DoublyLinkedList* list) {
     Node* newNode = (Node*)kmalloc(sizeof(Node), GFP_KERNEL);
     if (newNode == NULL)
         return;
@@ -58,7 +59,7 @@ void appendNode(DoublyLinkedList* list) {
     }
 }
 
-void deleteNode(DoublyLinkedList* list, Node* node) {
+static void deleteNode(DoublyLinkedList* list, Node* node) {
     if (node == NULL) return;
 
     if (node->prev != NULL) {
@@ -76,7 +77,7 @@ void deleteNode(DoublyLinkedList* list, Node* node) {
     kfree(node); // Освобождаем память
 }
 
-int processList(void* arg) {
+static int processList(void* arg) {
     ThreadData* data = (ThreadData*)arg;
     Node* currentNode;
 
@@ -125,10 +126,9 @@ int processList(void* arg) {
 					}
 				}
 			}
-
     	}
-    	while(data->list->head != NULL);
-        printk("Thread 1: %d bits=0 in %d nodes\n", data->count_bits, data->count_nodes);
+    	while((data->list->head != NULL) && !kthread_should_stop());
+    	pr_info("Thread 1: %d bits=0 in %d nodes\n", data->count_bits, data->count_nodes);
     }
     // Thread 2 processes from tail (counts bits=1)
     else {
@@ -155,21 +155,15 @@ int processList(void* arg) {
 				}
 			}
 		}
-		while(data->list->tail != NULL);
-        printk("Thread 2: %d bits=1 in %d nodes\n", data->count_bits, data->count_nodes);
+		while((data->list->tail != NULL) && (!kthread_should_stop()));
+    	pr_info("Thread 2: %d bits=1 in %d nodes\n", data->count_bits, data->count_nodes);
     }
-
+    thread[data->direction==0?0:1] = NULL;
     return 0;
 }
 
-//-----
-
-static struct task_struct* thread[2];
-static ThreadData data[2];
-static DoublyLinkedList list;
-
 static int __init hello_init(void) {
-    printk(KERN_INFO "Hello!\n");
+	pr_info("Start module!\n");
     int numElements = 1000; // размер списка
 
 	list.head = NULL;
@@ -194,15 +188,34 @@ static int __init hello_init(void) {
 	for(int i = 0;  i<sizeof(thread)/sizeof(thread[0]); i++)
 	{
 		if(IS_ERR(thread[i]))
-			printk(KERN_INFO "Error starting thread%d\n",i);
+		{
+			pr_err("Error starting thread%d\n",i);
+			thread[i] = NULL;
+		}
 	}
     return 0; // Возврат 0 означает успешную загрузку модуля
 }
 
 static void __exit hello_exit(void) {
-    printk(KERN_INFO "Goodbye!\n");
+	for(int i = 0;  i<sizeof(thread)/sizeof(thread[0]); i++)
+	{
+		if (thread[i] != NULL)
+			if (thread[i]->__state != TASK_DEAD)
+			{
+				int s = kthread_stop(thread[i]);
+				pr_info("Stop the Thread%d status=%d\n", i,s);
+			}
+	}
+	mutex_lock(&list_lock);
+	while(list.head != NULL)
+	{
+		deleteNode(&list, list.head);
+	}
+	mutex_unlock(&list_lock);
+	pr_info("Count of zeros %d in %d nodes\n", data[0].count_bits, data[0].count_nodes);
+	pr_info("Count of ones %d in %d nodes\n", data[1].count_bits, data[1].count_nodes);
+	pr_info("Goodbye!\n");
 }
 
 module_init(hello_init); // Указывает функцию инициализации
 module_exit(hello_exit); // Указывает функцию выгрузки
-
