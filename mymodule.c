@@ -94,40 +94,9 @@ static int processList(void* arg) {
 
 		data->count_nodes++;
 		// Обработка value)
-		if (data->direction == 0) {
-			//вариант подсчета всех нулей
-			for (int i = 0; i < sizeof(value) * 8; i++) {
-				if (((value >> i) & 1) == 0) {
-					data->count_bits++;
-				}
-			}
-			//вариант подсчета только значащих нулей
-//			if(value == 0)
-//				data->count_bits++;
-//			else
-//			{
-//				int startBit = 0;
-//				for (int i = sizeof(value) * 8 - 1; i >= 0; i--) {
-//					if( ((1<<i) & value) != 0 )
-//					{
-//						startBit = i;
-//						break;
-//					}
-//				}
-//				for(int i = 0; i < startBit; i++)
-//				{
-//					if( ((1<<i) & value) == 0 ) {
-//						data->count_bits++;
-//					}
-//				}
-//			}
-		} else {
-			// подсчет единиц
-			for (int i = 0; i < sizeof(value) * 8; i++) {
-				if (((value >> i) & 1) == 1) {
-					data->count_bits++;
-				}
-			}
+		if (!data->direction) value = ~value;
+		for (int i = 0; i < sizeof(value) * 8; i++) {
+			data->count_bits += ((value >> i) & 1);
 		}
     }
     if(data->direction == 0)
